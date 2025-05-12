@@ -1,0 +1,42 @@
+This project uses UEFI header files from the EDK2 project,
+specifically from the directory:
+
+    MdePkg/Include/
+
+These headers are used solely for accessing UEFI standard data structures,
+constants, and protocol definitions required for UEFI application development.
+
+No other code or binary components from EDK2 are included in this project.
+
+The EDK2 project is licensed under the BSD-2-Clause-Patent license.
+For more information, see:
+
+    https://github.com/tianocore/edk2/blob/master/License.txt
+
+The original EDK2 headers are:
+- Copyright (c) 2006 - Present, Intel Corporation and contributors
+- SPDX-License-Identifier: BSD-2-Clause-Patent
+
+
+
+----------------------------------------------------------------------
+
+
+이 프로젝트는 EDK2 프로젝트의 UEFI 헤더 파일을 사용합니다.
+사용된 헤더는 다음 디렉토리의 파일들입니다:
+
+    MdePkg/Include/
+
+이들 헤더는 UEFI 응용 프로그램 개발에 필요한 표준 데이터 구조, 상수, 프로토콜 정의에만 사용됩니다.
+
+EDK2의 다른 코드나 바이너리 구성 요소는 이 프로젝트에 포함되지 않았습니다.
+
+EDK2 프로젝트는 BSD-2-Clause-Patent 라이선스를 따릅니다.
+자세한 내용은 다음 링크를 참고하세요:
+
+    https://github.com/tianocore/edk2/blob/master/License.txt
+
+원본 EDK2 헤더의 저작권은 다음과 같습니다:
+- Copyright (c) 2006 - 현재, Intel Corporation 및 기여자
+- SPDX-License-Identifier: BSD-2-Clause-Patent
+
