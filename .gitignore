@@ -1,0 +1,7 @@
+# ignore Build Dir
+Build/
+*.obj
+
+.vscode/
+
+esp.img
