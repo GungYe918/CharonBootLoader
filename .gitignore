@@ -4,4 +4,9 @@ Build/
 
 .vscode/
 
+#ignore esp.img
 esp.img
+
+#ignore OVMF
+OVMF/
+*.fd

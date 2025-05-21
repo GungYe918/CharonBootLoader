@@ -10,7 +10,7 @@ MAIN_OBJ     = $(BUILD_DIR)/main.obj
 
 
 OBJS         = Graphics/Image/picture.obj	Utils/print.obj	Graphics/Image/png_loader.obj	Graphics/Image/lodepng.obj	Utils/mem.obj	\
-				Utils/guid.obj	Utils/stub.obj	Utils/stub_asm.obj	Elf/loadElf.obj	Graphics/Screen/init_screen.obj
+				Utils/guid.obj	Utils/stub.obj	Utils/stub_asm.obj	Load/load.obj	Graphics/Screen/init_screen.obj
 
 # 내부 처리용 (Build/*.obj로 변환)
 OBJ_PATHS    = $(addprefix $(BUILD_DIR)/, $(OBJS))

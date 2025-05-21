@@ -3,7 +3,7 @@
 #include <Protocol/SimpleFileSystem.h>
 #include <Protocol/LoadedImage.h>
 
-#include "Elf.h"
+#include "../Elf/Elf.h"
 #include "../Utils/Print.h"
 
 extern EFI_BOOT_SERVICES *gBS;
@@ -18,7 +18,8 @@ typedef struct {
 
 BOOLEAN IsValidElf(Elf64_Ehdr* hdr);
 EFI_STATUS ParseElfHeader(EFI_FILE_PROTOCOL* File, ElfImage* image);
-EFI_STATUS LoadElfFile(EFI_HANDLE ImageHandle);
+EFI_STATUS LoadElfFile(EFI_HANDLE ImageHandle, CHAR16* ELfPath);
 
+EFI_STATUS LoadKernel(EFI_HANDLE ImageHandle, CHAR16 *KernelPath, UINT64 *EntryPoint);
 
 

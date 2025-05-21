@@ -8,14 +8,14 @@
 #include "Lib/Utils/Print.h"
 #include "Lib/Graphics/Image/Picture.h"
 #include "Lib/Utils/mem.h"
-#include "Lib/Elf/loadElf.h"
+#include "Lib/Load/Load.h"
 #include "Lib/Graphics/Screen/InitScreen.h"
 
 EFI_SYSTEM_TABLE *gST;
 EFI_BOOT_SERVICES *gBS;
 EFI_GRAPHICS_OUTPUT_PROTOCOL *gGop;
 
-#define KERNEL_PATH L"\\kernel\\kernel.elf"
+#define KERNEL_PATH L"\\kernel.elf"
 
 
 EFI_STATUS EFIAPI UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) { 
@@ -34,13 +34,15 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     Print(L"\n1\t2\t3\t4\t5\t6\n\n");
 
     
-    LoadElfFile(ImageHandle);
+    //LoadElfFile(ImageHandle, KERNEL_PATH);
+    EFI_STATUS Status;
+    UINT64 EntryPoint;
+    
+    // for testing...
+    Status = LoadKernel(ImageHandle, KERNEL_PATH, &EntryPoint);
+    
 
 
     while (1);
     return EFI_SUCCESS;
 }
-
-
-//__attribute__((section(".reloc")))
-//const unsigned char dummy_reloc[1] = { 0 };
