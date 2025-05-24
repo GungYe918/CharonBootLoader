@@ -5,6 +5,8 @@
 
 #include "../Elf/Elf.h"
 #include "../Utils/Print.h"
+#include "../Boot/BootInfo.h"
+
 
 extern EFI_BOOT_SERVICES *gBS;
 
@@ -20,6 +22,9 @@ BOOLEAN IsValidElf(Elf64_Ehdr* hdr);
 EFI_STATUS ParseElfHeader(EFI_FILE_PROTOCOL* File, ElfImage* image);
 EFI_STATUS LoadElfFile(EFI_HANDLE ImageHandle, CHAR16* ELfPath);
 
-EFI_STATUS LoadKernel(EFI_HANDLE ImageHandle, CHAR16 *KernelPath, UINT64 *EntryPoint);
+EFI_STATUS LoadKernel(EFI_HANDLE ImageHandle, CHAR16 *KernelPath, UINT64 *EntryPoint, UINT64 *KernelBase, UINT64 *KernelSize);
+
+VOID JumpToKernel(UINT64 EntryPoint, BootInfo *BootData) __attribute__((noreturn));
+
 
 

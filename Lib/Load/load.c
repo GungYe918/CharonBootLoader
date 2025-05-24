@@ -148,7 +148,9 @@ BOOLEAN IsMemoryRegionUsable(EFI_PHYSICAL_ADDRESS Addr, UINTN Pages) {
 EFI_STATUS LoadKernel(
     EFI_HANDLE ImageHandle,
     CHAR16 *KernelPath,
-    UINT64 *EntryPoint
+    UINT64 *EntryPoint,
+    UINT64 *KernelBase,
+    UINT64 *KernelSize
 ) {
     EFI_STATUS Status;
 
@@ -212,7 +214,7 @@ EFI_STATUS LoadKernel(
 
     // 커널 진입 주소 지정
     *EntryPoint = Ehdr.e_entry;
-    Print(L"The Kenel Entry is : 0x%lx\n", Ehdr.e_entry);
+    Print(L"The Kernel Entry is : 0x%lx\n", Ehdr.e_entry);
 
 
     // 프로그램 헤더 테이블 로딩
@@ -235,6 +237,12 @@ EFI_STATUS LoadKernel(
     Status = KernelFile->Read(KernelFile, &Size, Phdrs);
     if (EFI_ERROR(Status)) return Status;
 
+
+    // 커널의 낮은 주소와 높은 주소 설정
+    UINT64 LowestAddr   = ~0ULL;
+    UINT64 HighestAddr  = 0;
+
+
     // 로드할 Segment를 메모리에 복사
     for (UINT16 i = 0; i < Ehdr.e_phnum; ++i) {
         Elf64_Phdr *Phdr = &Phdrs[i];
@@ -243,6 +251,10 @@ EFI_STATUS LoadKernel(
 
         EFI_PHYSICAL_ADDRESS LoadAddr = Phdr->p_paddr;
         UINTN Pages = (Phdr->p_memsz + 0xFFF) / 0x1000;
+
+        if (LoadAddr < LowestAddr) LowestAddr = LoadAddr;
+        if (LoadAddr + Phdr->p_memsz > HighestAddr)
+            HighestAddr = LoadAddr + Phdr->p_memsz;
 
         // 메모리 영역 사용 가능성 검사
         if (!IsMemoryRegionUsable(LoadAddr, Pages)) {
@@ -290,14 +302,61 @@ EFI_STATUS LoadKernel(
 
     gBS->FreePool(Phdrs);
     Print(L"[Final] Kernel Loaded at Entry<0x%lx>\n", *EntryPoint);
+    
+
+
+    Print(L"\nELF Header details:\n\n");
+    Print(L"  e_entry: 0x%lx\n", Ehdr.e_entry);
+    Print(L"  e_phoff: 0x%lx\n", Ehdr.e_phoff);
+    Print(L"  e_phnum: %d\n", Ehdr.e_phnum);
+    Print(L"  e_phentsize: %d\n", Ehdr.e_phentsize);
+    Print(L"  e_type: %d\n", Ehdr.e_type);
+    Print(L"  e_machine: %d\n", Ehdr.e_machine);
+
+    // 아키텍처 검증
+#ifdef MDE_CPU_X64
+    if (Ehdr.e_machine != EM_X86_64) {
+        Print(L"Error: Kernel architecture mismatch\n");
+        return EFI_INCOMPATIBLE_VERSION;
+    }
+#elif defined(MDE_CPU_AARCH64)
+    if (Ehdr.e_machine != EM_AARCH64) {
+        Print(L"Error: Kernel architecture mismatch\n");
+        return EFI_INCOMPATIBLE_VERSION;
+    }
+#endif
+
+    // KernelBase & KernelSize 설정
+    if (KernelBase) *KernelBase = LowestAddr;
+    if (KernelSize) *KernelSize = HighestAddr - LowestAddr;
+
     return EFI_SUCCESS;
 
 }
 
+VOID JumpToKernel(UINT64 EntryPoint, BootInfo *BootData) {
 
+    /*  EntryPoint 설정  */
+    VOID (*KernelEntryFunc)(BootInfo*) = (VOID (*)(BootInfo*))(UINTN)EntryPoint;
+
+    // 커널로 점프
+    KernelEntryFunc(BootData);
+
+    // 여기로 다시 돌아오면 안됨...
+    Print(L"Why you came back??? Panic!!!\n\n");
+    while (1) {
+        UINTN i;
+        for (i = 0; i < 100000; ++i) {
+            __asm__ __volatile__(""); // 최적화 방지용...
+        }
+    }
+    Print(L"You alive...?");
+}
 
         
-        //메모리 할당 시작
+       
+
+//메모리 할당 시작
 
         //EFI_PHYSICAL_ADDRESS OriginalAddr = Phdr->p_vaddr & ~0xFFFULL;
         //UINTN Pages = (Phdr->p_memsz + (Phdr->p_vaddr - OriginalAddr) + 0xFFF) / 0x1000;
