@@ -10,3 +10,6 @@ esp.img
 #ignore OVMF
 OVMF/
 *.fd
+
+#ignore CharonC
+CharonC/

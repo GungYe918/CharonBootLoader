@@ -103,7 +103,6 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
 
     // ExitBootServices 실행
     Print(L"Calling ExitBootServices...\n");
-    Print(L"0x200000 = 0x%lx\n", *(UINT64*)0x200000);
 
     UINT8 *KernelCode = (UINT8*)(UINTN)EntryPoint;
     Print(L"[Debug] Kernel code at entry point: %02x %02x %02x %02x %02x %02x %02x %02x\n",
