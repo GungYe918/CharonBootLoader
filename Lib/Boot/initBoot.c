@@ -91,4 +91,155 @@ BootInfo* InitBootInfo(
 
 
 
-}   
+} 
+  
+/*
+EFI_STATUS ExitBootServicesWithRetry(EFI_HANDLE ImageHandle, UINTN *MapKeyOut) {
+    EFI_STATUS Status;
+    EFI_MEMORY_DESCRIPTOR *MemMap = NULL;
+    UINTN MemMapSize = 0;
+    UINTN MapKey;
+    UINTN DescSize;
+    UINT32 DescVersion;
+
+    // 1단계: 사이즈 요청
+    Status = gBS->GetMemoryMap(&MemMapSize, NULL, &MapKey, &DescSize, &DescVersion);
+    if (Status != EFI_BUFFER_TOO_SMALL) {
+        Print(L"[Error] GetMemoryMap failed: %r\n", Status);
+        return Status;
+    }
+
+    // 2단계: 버퍼 할당 (여유분 포함)
+    MemMapSize += 2 * DescSize;
+    Status = gBS->AllocatePool(EfiLoaderData, MemMapSize, (VOID **)&MemMap);
+    if (EFI_ERROR(Status)) {
+        Print(L"[Error] AllocatePool for MemoryMap failed: %r\n", Status);
+        return Status;
+    }
+
+    // 3단계: 실제 맵 가져오기
+    Status = gBS->GetMemoryMap(&MemMapSize, MemMap, &MapKey, &DescSize, &DescVersion);
+    if (EFI_ERROR(Status)) {
+        Print(L"[Error] GetMemoryMap (2nd) failed: %r\n", Status);
+        gBS->FreePool(MemMap);
+        return Status;
+    }
+
+    // 4단계: ExitBootServices 호출
+    Status = gBS->ExitBootServices(ImageHandle, MapKey);
+    if (EFI_ERROR(Status)) {
+        // Retry 로직 (아주 흔한 상황입니다)
+        Print(L"[Retry] ExitBootServices failed (%r), retrying...\n", Status);
+
+        // 최신 맵 다시 얻기
+        MemMapSize = 0;
+        Status = gBS->GetMemoryMap(&MemMapSize, NULL, &MapKey, &DescSize, &DescVersion);
+        if (Status != EFI_BUFFER_TOO_SMALL) {
+            Print(L"[Retry] GetMemoryMap failed: %r\n", Status);
+            gBS->FreePool(MemMap);
+            return Status;
+        }
+
+        MemMapSize += 2 * DescSize;
+        gBS->FreePool(MemMap);
+        Status = gBS->AllocatePool(EfiLoaderData, MemMapSize, (VOID **)&MemMap);
+        if (EFI_ERROR(Status)) return Status;
+
+        Status = gBS->GetMemoryMap(&MemMapSize, MemMap, &MapKey, &DescSize, &DescVersion);
+        if (EFI_ERROR(Status)) {
+            gBS->FreePool(MemMap);
+            return Status;
+        }
+
+        // 재시도
+        Status = gBS->ExitBootServices(ImageHandle, MapKey);
+    }
+
+    if (!EFI_ERROR(Status)) {
+        if (MapKeyOut) *MapKeyOut = MapKey;
+        Print(L"[OK] ExitBootServices successful.\n");
+    } else {
+        Print(L"[FAIL] ExitBootServices failed again: %r\n", Status);
+    }
+
+    gBS->FreePool(MemMap);
+    return Status;
+}
+*/
+
+EFI_STATUS ExitBootServicesWithRetry(EFI_HANDLE ImageHandle, UINTN *MapKeyOut) {
+    EFI_STATUS Status;
+    EFI_MEMORY_DESCRIPTOR *MemMap = NULL;
+    UINTN MemMapSize = 0;
+    UINTN LocalMapKey; // Use a local variable for MapKey
+    UINTN DescSize;
+    UINT32 DescVersion;
+    BOOLEAN ExitBootServicesSucceeded = FALSE;
+
+    // 1단계: 사이즈 요청
+    Status = gBS->GetMemoryMap(&MemMapSize, NULL, &LocalMapKey, &DescSize, &DescVersion);
+    if (Status != EFI_BUFFER_TOO_SMALL) {
+        Print(L"[Error] GetMemoryMap failed: %r\n", Status);
+        return Status;
+    }
+
+RetryAllocateAndGetMap:
+    // 2단계: 버퍼 할당 (여유분 포함)
+    // 이전 MemMap이 있다면 해제 (ExitBootServices 실패 시에만 도달)
+    if (MemMap != NULL) {
+        gBS->FreePool(MemMap);
+        MemMap = NULL;
+    }
+    MemMapSize += 2 * DescSize; // 약간의 추가 공간 확보
+    Status = gBS->AllocatePool(EfiLoaderData, MemMapSize, (VOID **)&MemMap);
+    if (EFI_ERROR(Status)) {
+        Print(L"[Error] AllocatePool for MemoryMap failed: %r\n", Status);
+        return Status;
+    }
+
+    // 3단계: 실제 맵 가져오기
+    Status = gBS->GetMemoryMap(&MemMapSize, MemMap, &LocalMapKey, &DescSize, &DescVersion);
+    if (EFI_ERROR(Status)) {
+        Print(L"[Error] GetMemoryMap (2nd) failed: %r\n", Status);
+        // 재시도 로직을 위해 루프 시작점으로 갈 수 있지만, 여기서는 단순화
+        gBS->FreePool(MemMap); // 실패했으므로 gBS 사용 가능
+        return Status;
+    }
+
+    // 4단계: ExitBootServices 호출
+    Status = gBS->ExitBootServices(ImageHandle, LocalMapKey);
+    if (EFI_ERROR(Status)) {
+        Print(L"[Retry] ExitBootServices failed (%r), retrying...\n", Status);
+        // GetMemoryMap이 MapKey를 변경했을 수 있으므로, 전체 프로세스를 다시 시도
+        // (MemMapSize는 이전 값을 사용하거나 다시 0으로 설정하고 요청)
+        MemMapSize = 0; // 사이즈부터 다시 요청
+        Status = gBS->GetMemoryMap(&MemMapSize, NULL, &LocalMapKey, &DescSize, &DescVersion);
+        if (Status != EFI_BUFFER_TOO_SMALL) {
+            Print(L"[Retry] GetMemoryMap for retry failed: %r\n", Status);
+            gBS->FreePool(MemMap); // 실패했으므로 gBS 사용 가능
+            return Status;
+        }
+        goto RetryAllocateAndGetMap; // 할당부터 다시
+    }
+
+    // ExitBootServices가 성공한 경우
+    ExitBootServicesSucceeded = TRUE;
+    if (MapKeyOut) *MapKeyOut = LocalMapKey;
+    // Print(L"[OK] ExitBootServices successful.\n"); // UEFI 서비스 종료 후 Print 사용 불가!
+    // gBS->FreePool(MemMap); // UEFI 서비스 종료 후 FreePool 사용 불가! MemMap은 OS가 관리
+
+    // MemMap은 ExitBootServices 성공 시 해제하지 않습니다. OS가 이 메모리를 사용합니다.
+    // 실패 시에는 위에서 이미 해제되었거나, 이 함수를 빠져나가기 전에 해제됩니다.
+    if (!ExitBootServicesSucceeded && MemMap != NULL) {
+         gBS->FreePool(MemMap);
+    }
+
+    if (ExitBootServicesSucceeded) {
+         // 여기서는 어떤 gBS 서비스도 호출하면 안 됩니다.
+         // 필요한 정보 (MapKey 등)는 이미 반환 준비가 되었습니다.
+    } else {
+        Print(L"[FAIL] ExitBootServices failed definitively: %r\n", Status);
+    }
+
+    return Status;
+}

@@ -15,57 +15,125 @@
 EFI_SYSTEM_TABLE *gST;
 EFI_BOOT_SERVICES *gBS;
 EFI_GRAPHICS_OUTPUT_PROTOCOL *gGop;
-#define KERNEL_PATH L"\\kernel.elf"
+#define KERNEL_PATH L"\\kernel\\kernel.elf"
 
 
 EFI_STATUS EFIAPI UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) { 
-    InitScreen(SystemTable, 1024, 768, GetPixelColor(0, 0, 255));
+    InitScreen(SystemTable, 800, 600, GetPixelColor(0, 0, 255));
     Print(L"Hello! Welcome to the Charon World!!!\n");
+    Print(L"Loading FreeBSD-compatible kernel...\n");
     
-    //LoadElfFile(ImageHandle, KERNEL_PATH);
     EFI_STATUS Status;
-    UINT64 EntryPoint;
+    UINT64 EntryPoint = 0;
     UINT64 KernelBase = 0;
     UINT64 KernelSize = 0;
 
+    // 커널 로드
     Status = LoadKernel(ImageHandle, KERNEL_PATH, &EntryPoint, &KernelBase, &KernelSize);
     if (EFI_ERROR(Status)) {
-        Print(L"Something Happening...");
+        Print(L"[FATAL] Kernel loading failed: %r\n", Status);
+        Print(L"Press any key to exit...\n");
+        gST->ConIn->Reset(gST->ConIn, FALSE);
+        EFI_INPUT_KEY Key;
+        while (gST->ConIn->ReadKeyStroke(gST->ConIn, &Key) == EFI_NOT_READY);
+        return Status;
     }
-    Print(L"[ FINAL CHECK!! ] ENTRY:::::<0x%lx>\n", EntryPoint);
-    Print(L"KernelBase = 0x%lx\n", KernelBase);
-    Print(L"KernelSize = 0x%lx\n", KernelSize);
+    
+    Print(L"\n=== KERNEL LOADED SUCCESSFULLY ===\n");
+    Print(L"Entry Point: 0x%lx\n", EntryPoint);
+    Print(L"Kernel Base: 0x%lx\n", KernelBase);
+    Print(L"Kernel Size: 0x%lx bytes (%d KB)\n", KernelSize, (UINT32)(KernelSize / 1024));
+    
+    // 커널 진입점 검증
+    UINT8 *EntryBytes = (UINT8*)(UINTN)EntryPoint;
+    Print(L"Entry point instruction bytes: ");
+    for (int i = 0; i < 16; i++) {
+        Print(L"%02x ", EntryBytes[i]);
+    }
+    Print(L"\n");
 
-    UINT32 memmap = ScanMemMap_MB();
-    Print(L"MemMapSize = 0x%lx\n", memmap);
+    // 메모리 정보 수집
+    UINT32 TotalMemMB = ScanMemMap_MB();
+    Print(L"Total Memory: %d MB\n", TotalMemMB);
 
-    // 프레임 버퍼 초기화
-    UINT64 FrameBufferBase      = (UINT64)(UINTN)gGop->Mode->FrameBufferBase;
-    UINT32 Width                = gGop->Mode->Info->HorizontalResolution;
-    UINT32 Height               = gGop->Mode->Info->VerticalResolution;
-    UINT32 Pitch                = gGop->Mode->Info->PixelsPerScanLine * 4;
+    // 프레임버퍼 정보
+    UINT64 FrameBufferBase = (UINT64)(UINTN)gGop->Mode->FrameBufferBase;
+    UINT32 Width = gGop->Mode->Info->HorizontalResolution;
+    UINT32 Height = gGop->Mode->Info->VerticalResolution;
+    UINT32 Pitch = gGop->Mode->Info->PixelsPerScanLine * 4;
 
-    // BootInfo 초기화
+    Print(L"Framebuffer: 0x%lx (%dx%d, pitch=%d)\n", FrameBufferBase, Width, Height, Pitch);
+
+    // FreeBSD 호환 BootInfo 구조체 생성
     BootInfo* BootData = InitBootInfo(
         FrameBufferBase,
-        Width, Height,
-        Pitch, 
-        KernelBase,
-        KernelSize, 
-        "verbose",
-        "kernel.elf"
+        Width, Height, Pitch, 
+        KernelBase, KernelSize, 
+        "verbose",      // 커맨드라인 옵션
+        "kernel.elf"    // 커널 이름
     );
+    
     if (!BootData) {
-        Print(L"[Error] Failed to create BootData. Panic!!!\n");
+        Print(L"[FATAL] Failed to create BootInfo structure\n");
         return EFI_ABORTED;
-    } else {
-        Print(L"Success!!!\n");
     }
 
+    Print(L"\n=== BOOTINFO PREPARED ===\n");
+    Print(L"BootInfo at: 0x%lx\n", (UINT64)(UINTN)BootData);
+    Print(L"Version: 0x%x\n", BootData->bi_version);
+    Print(L"Memory size: %d MB\n", BootData->bi_memsize);
+    
+    // 모듈 정보 확인
+    PreloadedFile *module = (PreloadedFile *)(UINTN)(BootData->bi_modulep);
+    if (module) {
+        Print(L"Kernel module: %u at 0x%lx (size: 0x%lx)\n", 
+              module->f_name ? module->f_name : "unknown",
+              module->f_addr, module->f_size);
+    }
 
-    while (1);
+    Print(L"\n=== READY TO EXIT BOOT SERVICES ===\n");
+    Print(L"This will transfer control from UEFI to the kernel.\n");
+    Print(L"All UEFI services will be unavailable after this point.\n");
+    
+    // 3초 대기
+    for (int i = 3; i > 0; i--) {
+        Print(L"Exiting in %d seconds...\n", i);
+        gBS->Stall(1000000); // 1초 대기
+    }
+
+    // ExitBootServices 실행
+    Print(L"Calling ExitBootServices...\n");
+    Print(L"0x200000 = 0x%lx\n", *(UINT64*)0x200000);
+
+    UINT8 *KernelCode = (UINT8*)(UINTN)EntryPoint;
+    Print(L"[Debug] Kernel code at entry point: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+          KernelCode[0], KernelCode[1], KernelCode[2], KernelCode[3],
+          KernelCode[4], KernelCode[5], KernelCode[6], KernelCode[7]);
+
+    
+    Print(L"BootData pointer: 0x%lx\n", (UINT64)(UINTN)BootData);
+    Print(L"BootData->bi_framebuffer_addr = 0x%lx\n", BootData->bi_framebuffer_addr);
+
+
+    Status = ExitBootServicesWithRetry(ImageHandle, NULL);
+    if (EFI_ERROR(Status)) {
+        Print(L"[FATAL] ExitBootServices failed: %r\n", Status);
+        return Status;
+    }
+
+    // 이 시점에서 Print는 사용할 수 없음 (UEFI 서비스 종료됨)
+    
+    // 커널로 제어권 이전
+    JumpToKernel(EntryPoint, BootData);
+
+    // 여기에 도달하면 안됨
+    while (1) {
+        __asm__ __volatile__("hlt");
+    }
+    
     return EFI_SUCCESS;
 }
+
 
  /* TODO: fix error... maybe...
     UINT8 *image;

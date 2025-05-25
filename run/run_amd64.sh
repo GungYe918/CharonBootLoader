@@ -30,4 +30,5 @@ qemu-system-x86_64 \
   -m 512M \
   -serial mon:stdio \
   -net none \
-  -no-reboot
+  -no-reboot \
+  -no-shutdown

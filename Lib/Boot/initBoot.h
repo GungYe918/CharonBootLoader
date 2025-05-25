@@ -14,3 +14,5 @@ BootInfo* InitBootInfo(
     CHAR8 *CmdlineStr,   // "verbose" 등
     CHAR8 *KernelNameStr // "kernel.elf"
 );
+
+EFI_STATUS ExitBootServicesWithRetry(EFI_HANDLE ImageHandle, UINTN *MapKeyOut);

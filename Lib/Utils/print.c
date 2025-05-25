@@ -202,62 +202,56 @@ void Print(CHAR16 *fmt, ...) {
     for (UINTN i = 0; fmt[i] != L'\0' && bi < 511; i++) {
         if (fmt[i] == L'%' && fmt[i + 1] != L'\0') {
             i++;
-            if (fmt[i] == L'd') {
-                UINTN val = va_arg(args, UINTN);
-                CHAR16 numbuf[32];
-                UIntToDecimalStr(val, numbuf);
-                for (UINTN j = 0; numbuf[j] != L'\0' && bi < 511; j++) {
-                    buf[bi++] = numbuf[j];
-                }
-            } else if (fmt[i] == L'u') {
-                UINTN val = va_arg(args, UINTN);
-                CHAR16 numbuf[32];
-                UIntToDecimalStr(val, numbuf);
-                for (UINTN j = 0; numbuf[j] != L'\0' && bi < 511; j++) {
-                    buf[bi++] = numbuf[j];
-                }
-            } 
-            else if (fmt[i] == L'x') {
-                UINTN val = va_arg(args, UINTN);
-                CHAR16 numbuf[32];
-                UIntToHexStr(val, numbuf);
-                for (UINTN j = 0; numbuf[j] != L'\0' && bi < 511; j++) {
-                    buf[bi++] = numbuf[j];
-                }
-            } else if (fmt[i] == L'l') {
-                if (fmt[i+1] == L'x') {
-                    i++;    // x부분은 건너뛰기
-                    UINT64 val = va_arg(args, UINT64);
-                    CHAR16 numbuf[32];
-                    UInt64ToHexStr(val, numbuf);
-                    for (UINTN j = 0; numbuf[j] != L'\0' && bi < 511; j++) {
-                        buf[bi++] = numbuf[j];
-                    }
-                } else if (fmt[i+1] == L'u') {
+
+            // 패딩 숫자 추출 (예: %02x)
+            UINTN pad_width = 0;
+            if (fmt[i] == L'0') {
+                i++;
+                while (fmt[i] >= L'0' && fmt[i] <= L'9') {
+                    pad_width = pad_width * 10 + (fmt[i] - L'0');
                     i++;
-                    UINT64 val = va_arg(args, UINT64);
-                    CHAR16 numbuf[32];
-                    UInt64ToDecimalStr(val, numbuf);
-                    for (UINTN j = 0; numbuf[j] != L'\0' && bi < 511; j++) {
-                        buf[bi++] = numbuf[j];
-                    }
                 }
+            }
+
+            CHAR16 numbuf[32] = {0};
+
+            if (fmt[i] == L'd' || fmt[i] == L'u') {
+                UINTN val = va_arg(args, UINTN);
+                UIntToDecimalStr(val, numbuf);
+            } else if (fmt[i] == L'x') {
+                UINTN val = va_arg(args, UINTN);
+                UIntToHexStr(val, numbuf);
+            } else if (fmt[i] == L'l' && (fmt[i+1] == L'u' || fmt[i+1] == L'x')) {
+                UINT64 val = va_arg(args, UINT64);
+                if (fmt[i+1] == L'u') {
+                    UInt64ToDecimalStr(val, numbuf);
+                } else {
+                    UInt64ToHexStr(val, numbuf);
+                }
+                i++;
             } else if (fmt[i] == L's') {
                 CHAR16* str = va_arg(args, CHAR16*);
                 for (UINTN j = 0; str[j] != L'\0' && bi < 511; j++) {
                     buf[bi++] = str[j];
                 }
+                continue;
             } else if (fmt[i] == L'r') {
                 EFI_STATUS val = va_arg(args, EFI_STATUS);
                 CHAR16 *msg = StatusToStr(val);
                 for (UINTN j = 0; msg[j] != L'\0' && bi < 511; j++) {
                     buf[bi++] = msg[j];
                 }
+                continue;
             } else {
-                // % 외 문자는 그대로 출력
                 buf[bi++] = L'%';
                 buf[bi++] = fmt[i];
+                continue;
             }
+
+            // 패딩 적용
+            UINTN len = 0; while (numbuf[len] != L'\0') len++;
+            for (UINTN p = len; p < pad_width && bi < 511; p++) buf[bi++] = L'0';
+            for (UINTN j = 0; numbuf[j] != L'\0' && bi < 511; j++) buf[bi++] = numbuf[j];
         } else {
             buf[bi++] = fmt[i];
         }

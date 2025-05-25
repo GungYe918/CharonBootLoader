@@ -144,7 +144,7 @@ BOOLEAN IsMemoryRegionUsable(EFI_PHYSICAL_ADDRESS Addr, UINTN Pages) {
     return Usable;
 }
 
-
+/*
 EFI_STATUS LoadKernel(
     EFI_HANDLE ImageHandle,
     CHAR16 *KernelPath,
@@ -333,25 +333,288 @@ EFI_STATUS LoadKernel(
     return EFI_SUCCESS;
 
 }
+*/
+
+EFI_STATUS LoadKernel(
+    EFI_HANDLE ImageHandle,
+    CHAR16 *KernelPath,
+    UINT64 *EntryPoint,
+    UINT64 *KernelBase,
+    UINT64 *KernelSize
+) {
+    EFI_STATUS Status;
+
+    // ImageProtocol 가져오기
+    EFI_LOADED_IMAGE_PROTOCOL *LoadedImage;
+    Status = gBS->HandleProtocol(
+        ImageHandle,
+        &gEfiLoadedImageProtocolGuid,
+        (VOID**)&LoadedImage
+    );
+    if(EFI_ERROR(Status)) {
+        Print(L"[Error] Failed to get LoadedImageProtocol: %r\n", Status);
+        return Status;
+    }
+
+    // simpleFileSystem을 이용한 파일 open
+    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *FileSys;
+    Status = gBS->HandleProtocol(
+        LoadedImage->DeviceHandle,
+        &gEfiSimpleFileSystemProtocolGuid,
+        (VOID**)&FileSys
+    );
+    if(EFI_ERROR(Status)) {
+        Print(L"[Error] Failed to get SimpleFileSystemProtocol : %r\n", Status);
+        return Status;
+    }
+
+    // 루트 폴더 열기
+    EFI_FILE_PROTOCOL *Root;
+    Status = FileSys->OpenVolume(FileSys, &Root);
+    if (EFI_ERROR(Status)) {
+        Print(L"[Error] Failed to open Root Volume : %r\n", Status);
+        return Status;
+    }
+
+    // 커널 파일 열기
+    EFI_FILE_PROTOCOL *KernelFile;
+    Status = Root->Open(
+        Root, &KernelFile,
+        KernelPath, 
+        EFI_FILE_MODE_READ,
+        0
+    );
+    if (EFI_ERROR(Status)) {
+        Print(L"[Error] Failed to open KernelFile : %r\n", Status);
+        Root->Close(Root);
+        return Status;
+    }
+
+    // Elf 헤더 읽기
+    Elf64_Ehdr Ehdr;
+    UINTN Size = sizeof(Ehdr);
+    Status = KernelFile->Read(KernelFile, &Size, &Ehdr);
+    if (EFI_ERROR(Status) || Size != sizeof(Ehdr)) {
+        Print(L"[Error] Failed to read ELF header: %r\n", Status);
+        KernelFile->Close(KernelFile);
+        Root->Close(Root);
+        return EFI_LOAD_ERROR;
+    }
+
+    // ELF 매직 넘버 확인
+    if (Ehdr.e_ident[EI_MAG0] != ELFMAG0 || 
+        Ehdr.e_ident[EI_MAG1] != ELFMAG1 ||
+        Ehdr.e_ident[EI_MAG2] != ELFMAG2 || 
+        Ehdr.e_ident[EI_MAG3] != ELFMAG3) {
+        Print(L"[Error] Invalid ELF magic number\n");
+        KernelFile->Close(KernelFile);
+        Root->Close(Root);
+        return EFI_LOAD_ERROR;
+    }
+
+    // 아키텍처 검증
+#ifdef MDE_CPU_X64
+    if (Ehdr.e_machine != EM_X86_64) {
+        Print(L"Error: Kernel architecture mismatch\n");
+        return EFI_INCOMPATIBLE_VERSION;
+    }
+#elif defined(MDE_CPU_AARCH64)
+    if (Ehdr.e_machine != EM_AARCH64) {
+        Print(L"Error: Kernel architecture mismatch\n");
+        return EFI_INCOMPATIBLE_VERSION;
+    }
+#endif
+
+    // 커널 진입 주소 설정
+    *EntryPoint = Ehdr.e_entry;
+    Print(L"[Info] Kernel Entry Point: 0x%lx\n", Ehdr.e_entry);
+
+    // 프로그램 헤더 테이블 로딩
+    if (Ehdr.e_phnum == 0 || Ehdr.e_phentsize != sizeof(Elf64_Phdr)) {
+        Print(L"[Error] Invalid program header table\n");
+        KernelFile->Close(KernelFile);
+        Root->Close(Root);
+        return EFI_LOAD_ERROR;
+    }
+
+    UINTN PHTSize = Ehdr.e_phentsize * Ehdr.e_phnum;
+    Elf64_Phdr *Phdrs;
+    Status = gBS->AllocatePool(EfiLoaderData, PHTSize, (VOID**)&Phdrs);
+    if (EFI_ERROR(Status)) {
+        Print(L"[Error] Failed to allocate program header table: %r\n", Status);
+        KernelFile->Close(KernelFile);
+        Root->Close(Root);
+        return Status;
+    }
+
+    Status = KernelFile->SetPosition(KernelFile, Ehdr.e_phoff);
+    if (EFI_ERROR(Status)) {
+        Print(L"[Error] Failed to seek to program headers: %r\n", Status);
+        gBS->FreePool(Phdrs);
+        KernelFile->Close(KernelFile);
+        Root->Close(Root);
+        return Status;
+    }
+
+    Size = PHTSize;
+    Status = KernelFile->Read(KernelFile, &Size, Phdrs);
+    if (EFI_ERROR(Status) || Size != PHTSize) {
+        Print(L"[Error] Failed to read program headers: %r\n", Status);
+        gBS->FreePool(Phdrs);
+        KernelFile->Close(KernelFile);
+        Root->Close(Root);
+        return Status;
+    }
+
+    // 커널의 메모리 범위 계산
+    UINT64 LowestAddr = ~0ULL;
+    UINT64 HighestAddr = 0;
+
+    for (UINT16 i = 0; i < Ehdr.e_phnum; ++i) {
+        Elf64_Phdr *Phdr = &Phdrs[i];
+        if (Phdr->p_type != PT_LOAD || Phdr->p_memsz == 0) continue;
+
+        Print(L"[Debug] Segment %d: vaddr=0x%lx paddr=0x%lx memsz=0x%lx filesz=0x%lx\n",
+              i, Phdr->p_vaddr, Phdr->p_paddr, Phdr->p_memsz, Phdr->p_filesz);
+
+        if (Phdr->p_paddr < LowestAddr) LowestAddr = Phdr->p_paddr;
+        if (Phdr->p_paddr + Phdr->p_memsz > HighestAddr)
+            HighestAddr = Phdr->p_paddr + Phdr->p_memsz;
+    }
+
+    if (LowestAddr == ~0ULL) {
+        Print(L"[Error] No loadable segments found\n");
+        gBS->FreePool(Phdrs);
+        KernelFile->Close(KernelFile);
+        Root->Close(Root);
+        return EFI_LOAD_ERROR;
+    }
+
+    // 전체 커널 크기 계산
+    UINT64 TotalKernelSize = HighestAddr - LowestAddr;
+    UINTN TotalPages = (TotalKernelSize + 0xFFF) / 0x1000;
+
+    Print(L"[Info] Kernel memory range: 0x%lx - 0x%lx (size: 0x%lx, pages: %d)\n",
+          LowestAddr, HighestAddr, TotalKernelSize, TotalPages);
+
+    // UEFI 메모리 할당 시도 (특정 주소)
+    EFI_PHYSICAL_ADDRESS KernelPhysAddr = LowestAddr;
+    Status = gBS->AllocatePages(
+        AllocateAddress,
+        EfiLoaderData,
+        TotalPages,
+        &KernelPhysAddr
+    );
+
+    UINT64 LoadOffset = 0;
+    if (EFI_ERROR(Status)) {
+        // 특정 주소 할당 실패 시, 임의 위치에 할당하고 오프셋 계산
+        Print(L"[Warning] Cannot allocate at 0x%lx (%r), trying any address\n", LowestAddr, Status);
+        
+        KernelPhysAddr = 0;
+        Status = gBS->AllocatePages(
+            AllocateAnyPages,
+            EfiLoaderData,
+            TotalPages,
+            &KernelPhysAddr
+        );
+        
+        if (EFI_ERROR(Status)) {
+            Print(L"[Error] Failed to allocate %d pages: %r\n", TotalPages, Status);
+            gBS->FreePool(Phdrs);
+            KernelFile->Close(KernelFile);
+            Root->Close(Root);
+            return Status;
+        }
+        
+        LoadOffset = KernelPhysAddr - LowestAddr;
+        *EntryPoint = Ehdr.e_entry + LoadOffset;
+        Print(L"[Info] Kernel relocated: offset=0x%lx, new_entry=0x%lx\n", LoadOffset, *EntryPoint);
+    }
+
+    // 할당된 메모리 영역 초기화
+    gBS->SetMem((VOID*)(UINTN)KernelPhysAddr, TotalKernelSize, 0);
+
+    // 각 로드 가능한 세그먼트 처리
+    for (UINT16 i = 0; i < Ehdr.e_phnum; ++i) {
+        Elf64_Phdr *Phdr = &Phdrs[i];
+        if (Phdr->p_type != PT_LOAD || Phdr->p_memsz == 0) continue;
+
+        // 실제 로드 주소 계산
+        UINT64 LoadAddr = KernelPhysAddr + (Phdr->p_paddr - LowestAddr);
+
+        Print(L"[Info] Loading segment %d to 0x%lx (size: 0x%lx)\n", i, LoadAddr, Phdr->p_memsz);
+
+        // 파일에서 데이터 읽기 (p_filesz > 0인 경우만)
+        if (Phdr->p_filesz > 0) {
+            Status = KernelFile->SetPosition(KernelFile, Phdr->p_offset);
+            if (EFI_ERROR(Status)) {
+                Print(L"[Error] Failed to seek to segment %d: %r\n", i, Status);
+                gBS->FreePages(KernelPhysAddr, TotalPages);
+                gBS->FreePool(Phdrs);
+                KernelFile->Close(KernelFile);
+                Root->Close(Root);
+                return Status;
+            }
+
+            // 임시 버퍼 할당하여 데이터 읽기
+            VOID *TempBuf;
+            Status = gBS->AllocatePool(EfiLoaderData, Phdr->p_filesz, &TempBuf);
+            if (EFI_ERROR(Status)) {
+                Print(L"[Error] Failed to allocate temp buffer: %r\n", Status);
+                gBS->FreePages(KernelPhysAddr, TotalPages);
+                gBS->FreePool(Phdrs);
+                KernelFile->Close(KernelFile);
+                Root->Close(Root);
+                return Status;
+            }
+
+            UINTN ReadSize = Phdr->p_filesz;
+            Status = KernelFile->Read(KernelFile, &ReadSize, TempBuf);
+            if (EFI_ERROR(Status) || ReadSize != Phdr->p_filesz) {
+                Print(L"[Error] Failed to read segment %d data: %r\n", i, Status);
+                gBS->FreePool(TempBuf);
+                gBS->FreePages(KernelPhysAddr, TotalPages);
+                gBS->FreePool(Phdrs);
+                KernelFile->Close(KernelFile);
+                Root->Close(Root);
+                return Status;
+            }
+
+            // 데이터 복사
+            Kmemcpy((VOID*)(UINTN)LoadAddr, TempBuf, Phdr->p_filesz);
+            gBS->FreePool(TempBuf);
+        }
+
+        // BSS 영역은 이미 위에서 전체를 0으로 초기화했으므로 추가 작업 불필요
+        Print(L"[OK] Segment %d loaded successfully\n", i);
+    }
+
+    // 정리
+    gBS->FreePool(Phdrs);
+    KernelFile->Close(KernelFile);
+    Root->Close(Root);
+
+    // 반환값 설정
+    if (KernelBase) *KernelBase = KernelPhysAddr;
+    if (KernelSize) *KernelSize = TotalKernelSize;
+
+    Print(L"[SUCCESS] Kernel loaded at 0x%lx, entry at 0x%lx\n", KernelPhysAddr, *EntryPoint);
+    return EFI_SUCCESS;
+}
 
 VOID JumpToKernel(UINT64 EntryPoint, BootInfo *BootData) {
-
-    /*  EntryPoint 설정  */
-    VOID (*KernelEntryFunc)(BootInfo*) = (VOID (*)(BootInfo*))(UINTN)EntryPoint;
-
-    // 커널로 점프
-    KernelEntryFunc(BootData);
-
-    // 여기로 다시 돌아오면 안됨...
-    Print(L"Why you came back??? Panic!!!\n\n");
-    while (1) {
-        UINTN i;
-        for (i = 0; i < 100000; ++i) {
-            __asm__ __volatile__(""); // 최적화 방지용...
-        }
-    }
-    Print(L"You alive...?");
+    // 부트 인포를 rdi에 전달하고, 엔트리포인트로 JMP (call 아님!)
+    __asm__ __volatile__ (
+        "mov %0, %%rdi\n\t"
+        "jmp *%1\n\t"
+        :
+        : "r" (BootData), "r" (EntryPoint)
+        : "rdi"
+    );
+    __builtin_unreachable();
 }
+
 
         
        
