@@ -80,6 +80,18 @@ UINT32 GetPixelColor(UINT32 r, UINT32 g, UINT32 b) {
     return color;
 }
 
+PixelFormat ConvertPixelFormat(EFI_GRAPHICS_PIXEL_FORMAT fmt) {
+    switch (fmt) {
+        case PixelRedGreenBlueReserved8BitPerColor:
+            return kPixelRGBResv8BitPerColor;
+        case PixelBlueGreenRedReserved8BitPerColor:
+            return kPixelBGRResv8BitPerColor;
+        default:
+            // 최소한 crash 나지 않게 디폴트
+            return kPixelRGBResv8BitPerColor;
+    }
+}
+
 void FillScreen(EFI_GRAPHICS_OUTPUT_PROTOCOL *gop, UINT32 color) {
     UINT32 *fb = (UINT32 *) (UINTN)gop->Mode->FrameBufferBase;
     UINTN width = gop->Mode->Info->HorizontalResolution;

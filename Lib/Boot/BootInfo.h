@@ -3,6 +3,11 @@
 
 #include <Uefi.h>
 
+typedef enum {
+    kPixelRGBResv8BitPerColor,
+    kPixelBGRResv8BitPerColor,
+} PixelFormat;
+
 // BootInfo 구조체 정의 (FreeBSD 호환)
 typedef struct {
     UINT32 bi_version;               // 구조체 버전
@@ -11,6 +16,7 @@ typedef struct {
     UINT32 bi_framebuffer_width;     // 화면 너비
     UINT32 bi_framebuffer_height;    // 화면 높이
     UINT32 bi_framebuffer_pitch;     // 프레임버퍼 피치
+    PixelFormat bi_pixel_format;
     UINT32 bi_howto;                 // 부팅 옵션
     UINT32 bi_memsize;               // 메모리 크기 (MB)
     UINT64 bi_modulep;               // preloaded_file 리스트 포인터

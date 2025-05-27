@@ -1,5 +1,5 @@
 #!/bin/bash
-# run.sh - esp 디렉토리 -> FAT32 이미지 -> QEMU (aarch64) 자동 실행
+# run_aarch64.sh - esp 디렉토리 -> FAT32 이미지 -> QEMU AArch64 자동 실행
 
 set -e
 
@@ -22,15 +22,14 @@ trap 'sudo umount "$MOUNT_POINT" 2>/dev/null || true' EXIT
 sudo cp -rT "$ESP_DIR" "$MOUNT_POINT"
 sync
 
-echo "[4/4] QEMU (aarch64) 실행"
-# -nographic 제거하고 VGA 출력 활성화
+echo "[4/4] QEMU AArch64 실행"
 qemu-system-aarch64 \
-  -M virt \
+  -machine virt \
   -cpu cortex-a72 \
-  -m 1024 \
   -bios OVMF/AA64/OVMF.fd \
-  -drive file="$IMG_FILE",format=raw,if=none,id=hd0 \
-  -device virtio-blk-device,drive=hd0 \
-  -device virtio-gpu-pci \
+  -drive format=raw,file="$IMG_FILE" \
+  -m 512M \
+  -serial mon:stdio \
   -net none \
-  -no-reboot
+  -no-reboot \
+  -no-shutdown

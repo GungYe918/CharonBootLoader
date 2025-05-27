@@ -5,7 +5,9 @@ MACHINE_FLAG    = /machine:arm64
 
 CFLAGS += -ffreestanding -fshort-wchar -Wall \
           -IInclude -IInclude/Protocol -IInclude/Arm \
-          -fno-stack-check -fno-stack-protector
+          -fno-stack-check -fno-stack-protector     \
+          -fno-pic -fno-pie
 
 LDFLAGS += /subsystem:efi_application /entry:UefiMain $(MACHINE_FLAG) \
-           /nodefaultlib /opt:ref /dll
+           /nodefaultlib /opt:ref /dll /align:4096  /export:UefiMain
+

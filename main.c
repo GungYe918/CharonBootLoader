@@ -17,11 +17,19 @@ EFI_BOOT_SERVICES *gBS;
 EFI_GRAPHICS_OUTPUT_PROTOCOL *gGop;
 #define KERNEL_PATH L"\\kernel\\kernel.elf"
 
-
+__attribute__((used))
 EFI_STATUS EFIAPI UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) { 
     InitScreen(SystemTable, 800, 600, GetPixelColor(0, 0, 255));
     Print(L"Hello! Welcome to the Charon World!!!\n");
-    Print(L"Loading FreeBSD-compatible kernel...\n");
+#ifdef MDE_CPU_AARCH64
+    // AArch64에서는 더미 코드만 실행
+    Print(L"[Info] AARCH64 architecture detected.\n");
+    Print(L"[Info] Skipping actual kernel loading and jumping.\n");
+    Print(L"UEFI services remain active. Exiting early for test.\n");
+
+    while(1);
+    return EFI_SUCCESS;
+#endif
     
     EFI_STATUS Status;
     UINT64 EntryPoint = 0;
@@ -68,6 +76,7 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     BootInfo* BootData = InitBootInfo(
         FrameBufferBase,
         Width, Height, Pitch, 
+        ConvertPixelFormat(gGop->Mode->Info->PixelFormat),
         KernelBase, KernelSize, 
         "verbose",      // 커맨드라인 옵션
         "kernel.elf"    // 커널 이름

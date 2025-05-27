@@ -427,7 +427,11 @@ EFI_STATUS LoadKernel(
 
     // 커널 진입 주소 설정
     *EntryPoint = Ehdr.e_entry;
-    Print(L"[Info] Kernel Entry Point: 0x%lx\n", Ehdr.e_entry);
+#ifdef MDE_CPU_X64
+    Print(L"[Info] Kernel Entry Point: 0x%lx (physical)\n", *EntryPoint);
+#elif defined(MDE_CPU_AARCH64)
+    Print(L"[Info] Kernel Entry Point: 0x%lx (virtual)\n", *EntryPoint);
+#endif
 
     // 프로그램 헤더 테이블 로딩
     if (Ehdr.e_phnum == 0 || Ehdr.e_phentsize != sizeof(Elf64_Phdr)) {
@@ -528,7 +532,11 @@ EFI_STATUS LoadKernel(
         }
         
         LoadOffset = KernelPhysAddr - LowestAddr;
+#ifdef MDE_CPU_X64
         *EntryPoint = Ehdr.e_entry + LoadOffset;
+#elif defined(MDE_CPU_AARCH64)
+        *EntryPoint = Ehdr.e_entry;  // ARM은 가상주소 기준
+#endif
         Print(L"[Info] Kernel relocated: offset=0x%lx, new_entry=0x%lx\n", LoadOffset, *EntryPoint);
     }
 
@@ -604,7 +612,7 @@ EFI_STATUS LoadKernel(
 }
 
 VOID JumpToKernel(UINT64 EntryPoint, BootInfo *BootData) {
-    // 부트 인포를 rdi에 전달하고, 엔트리포인트로 JMP (call 아님!)
+#ifdef MDE_CPU_X64
     __asm__ __volatile__ (
         "mov %0, %%rdi\n\t"
         "jmp *%1\n\t"
@@ -612,6 +620,15 @@ VOID JumpToKernel(UINT64 EntryPoint, BootInfo *BootData) {
         : "r" (BootData), "r" (EntryPoint)
         : "rdi"
     );
+#elif defined(MDE_CPU_AARCH64)
+    __asm__ __volatile__ (
+        "mov x0, %0\n\t"
+        "br %1\n\t"
+        :
+        : "r" (BootData), "r" (EntryPoint)
+        : "x0"
+    );
+#endif
     __builtin_unreachable();
 }
 

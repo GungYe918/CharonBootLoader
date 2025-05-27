@@ -15,7 +15,12 @@ OBJ_PATHS = $(addprefix $(BUILD_DIR)/, $(OBJS))
 TARGET_FILE = $(OUTPUT_DIR)/$(TARGET)
 
 ifeq ($(ARCH),amd64)
+CFLAGS += -DMDE_CPU_X64
 OBJS += Utils/stub_asm.obj
+endif
+
+ifeq ($(ARCH),aarch64)
+CFLAGS += -DMDE_CPU_AARCH64
 endif
 
 .PHONY: run clean	all
@@ -55,5 +60,11 @@ clean:
 	rm -rf $(TARGET_FILE)
 
 
-run: 
+run:
+ifeq ($(ARCH),amd64)
 	./run/run_amd64.sh
+else ifeq ($(ARCH),aarch64)
+	./run/run_aarch64.sh
+else
+	@echo "Unsupported ARCH: $(ARCH)"
+endif

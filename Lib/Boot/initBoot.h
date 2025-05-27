@@ -9,6 +9,7 @@ BootInfo* InitBootInfo(
     UINT32 Width,
     UINT32 Height,
     UINT32 Pitch,
+    PixelFormat pixelFormat,
     UINT64 KernelBase,
     UINT64 KernelSize,
     CHAR8 *CmdlineStr,   // "verbose" 등
