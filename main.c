@@ -121,6 +121,12 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable
     
     Print(L"BootData pointer: 0x%lx\n", (UINT64)(UINTN)BootData);
     Print(L"BootData->bi_framebuffer_addr = 0x%lx\n", BootData->bi_framebuffer_addr);
+    Print(L"Password Hash:\n");
+    for (int i = 0; i < 32; ++i) {
+        Print(L"%02x ", BootData->bi_pwd_hash[i]);
+        if ((i + 1) % 16 == 0)
+            Print(L"\n");
+    }
 
 
     Status = ExitBootServicesWithRetry(ImageHandle, NULL);

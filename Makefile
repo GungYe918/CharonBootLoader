@@ -9,7 +9,7 @@ MAIN_OBJ = $(BUILD_DIR)/main.obj
 
 OBJS = Graphics/Image/picture.obj Utils/print.obj Graphics/Image/png_loader.obj Graphics/Image/lodepng.obj \
        Utils/mem.obj Utils/guid.obj Utils/stub_asm.obj Load/load.obj Graphics/Screen/init_screen.obj	\
-	   Boot/initBoot.obj
+	   Boot/initBoot.obj	Security/hash.obj
 OBJ_PATHS = $(addprefix $(BUILD_DIR)/, $(OBJS))
 
 TARGET_FILE = $(OUTPUT_DIR)/$(TARGET)
@@ -22,6 +22,8 @@ endif
 ifeq ($(ARCH),aarch64)
 CFLAGS += -DMDE_CPU_AARCH64
 endif
+
+CFLAGS	+=	-ILib	-ILib/Boot	-ILib/Utils	-ILib/Security
 
 .PHONY: run clean	all
 

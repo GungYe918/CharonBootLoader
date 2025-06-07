@@ -19,10 +19,12 @@ typedef struct {
     PixelFormat bi_pixel_format;
     UINT32 bi_howto;                 // 부팅 옵션
     UINT32 bi_memsize;               // 메모리 크기 (MB)
+    UINT32 __padding1;               // 8바이트 정렬을 위한 padding 값
     UINT64 bi_modulep;               // preloaded_file 리스트 포인터
     UINT64 bi_envp;                  // 환경 변수 포인터
     UINT64 bi_cmdline;               // 커맨드라인 문자열 포인터
     UINT64 bi_kernelbase;            // 커널이 메모리에 로드된 물리 주소
+    UINT8  bi_pwd_hash[32];   // 커널에 전달할 암호 해시
 } BootInfo;
 
 // PreloadedFile 구조체 정의

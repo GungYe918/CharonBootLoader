@@ -1,10 +1,12 @@
 #include "BootInfo.h"
 #include "../Utils/mem.h"
 #include "../Utils/Print.h"
+#include "../Security/PwdHash.h"
+
 
 extern EFI_BOOT_SERVICES *gBS;
 
-// BootInfo구조체 초기화 함수수
+// BootInfo구조체 초기화 함수
 BootInfo* InitBootInfo(
     UINT64 FramebufferBase,
     UINT32 Width,
@@ -87,6 +89,7 @@ BootInfo* InitBootInfo(
     BootData->bi_envp                   = 0;
     BootData->bi_cmdline                = (UINT64)(UINTN)CmdLineBuf;
     BootData->bi_kernelbase             = KernelBase;
+    RegisterHash(BootData, kPasswordHash, 32);
 
     
 
